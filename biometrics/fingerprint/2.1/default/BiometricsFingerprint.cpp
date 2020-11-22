@@ -260,26 +260,23 @@ fingerprint_device_t* getDeviceForVendor(const char *class_name) {
 
 fingerprint_device_t* getFingerprintDevice() {
     fingerprint_device_t *fp_device;
-    std::string variant = base::GetProperty(PROP_VARIANT, "");
+    std::string vendor_modules[] = { "goodix.fod", "goodix.g6.fod" };
 
-    if (variant == "12") {
-        fp_device = getDeviceForVendor("goodix.fod");
-        if (fp_device == nullptr) {
-            ALOGE("Failed to load Goodix fingerprint module");
-        } else {
-            return fp_device;
+    for (const auto& vendor : vendor_modules) {
+        if ((fp_device = getDeviceForVendor(vendor.c_str())) == nullptr) {
+            ALOGE("Failed to load %s fingerprint module", vendor.c_str());
+            continue;
         }
-    } else if (variant == "11") {
-        fp_device = getDeviceForVendor("goodix.g6.fod");
-        if (fp_device == nullptr) {
-            ALOGE("Failed to load Goodix G6 fingerprint module");
-        } else {
-            return fp_device;
-        }
+
+        setFpVendorProp(vendor.c_str());
+        return fp_device;
     }
+
+    setFpVendorProp("none");
 
     return nullptr;
 }
+
 
 fingerprint_device_t* BiometricsFingerprint::openHal() {
     int err;
