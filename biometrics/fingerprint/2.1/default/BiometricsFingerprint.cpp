@@ -28,8 +28,6 @@
 #include <inttypes.h>
 #include <unistd.h>
 
-#define PROP_VARIANT "ro.boot.prj_version"
-
 namespace android {
 namespace hardware {
 namespace biometrics {
@@ -260,16 +258,16 @@ fingerprint_device_t* getDeviceForVendor(const char *class_name) {
 
 fingerprint_device_t* getFingerprintDevice() {
     fingerprint_device_t *fp_device;
-    std::string variant = base::GetProperty(PROP_VARIANT, "");
+    std::string device = android::base::GetProperty("ro.product.device", "");
 
-    if (variant == "12") {
+    if (device == "OnePlus8") {
         fp_device = getDeviceForVendor("goodix.fod");
         if (fp_device == nullptr) {
             ALOGE("Failed to load Goodix fingerprint module");
         } else {
             return fp_device;
         }
-    } else if (variant == "11") {
+    } else if (device == "OnePlus8Pro") {
         fp_device = getDeviceForVendor("goodix.g6.fod");
         if (fp_device == nullptr) {
             ALOGE("Failed to load Goodix G6 fingerprint module");
