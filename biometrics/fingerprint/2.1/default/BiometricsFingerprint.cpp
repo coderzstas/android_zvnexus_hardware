@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2017 The Android Open Source Project
+ *               2020 The LineageOS Project
+ *               2020 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +18,17 @@
 #define LOG_TAG "android.hardware.biometrics.fingerprint@2.1-service"
 #define LOG_VERBOSE "android.hardware.biometrics.fingerprint@2.1-service"
 
-#include <hardware/hw_auth_token.h>
+#include <android-base/properties.h>
 
+#include <hardware/hw_auth_token.h>
 #include <hardware/hardware.h>
 #include <hardware/fingerprint.h>
 #include "BiometricsFingerprint.h"
 
 #include <inttypes.h>
 #include <unistd.h>
+
+#define PROP_VARIANT "ro.boot.prj_version"
 
 namespace android {
 namespace hardware {
@@ -211,15 +216,12 @@ IBiometricsFingerprint* BiometricsFingerprint::getInstance() {
     return sInstance;
 }
 
-fingerprint_device_t* BiometricsFingerprint::openHal() {
+fingerprint_device_t* getDeviceForVendor(const char *class_name) {
     int err;
     const hw_module_t *hw_mdl = nullptr;
     ALOGD("Opening fingerprint hal library...");
-    #ifdef BOARD_FINGERPRINT_VENDOR
-        #undef FINGERPRINT_HARDWARE_MODULE_ID
-        #define FINGERPRINT_HARDWARE_MODULE_ID BOARD_FINGERPRINT_VENDOR
-    #endif
-    if (0 != (err = hw_get_module(FINGERPRINT_HARDWARE_MODULE_ID, &hw_mdl))) {
+    err = hw_get_module_by_class(FINGERPRINT_HARDWARE_MODULE_ID, class_name, &hw_mdl);
+    if (err) {
         ALOGE("Can't open fingerprint HW Module, error: %d", err);
         return nullptr;
     }
@@ -238,7 +240,8 @@ fingerprint_device_t* BiometricsFingerprint::openHal() {
 
     hw_device_t *device = nullptr;
 
-    if (0 != (err = module->common.methods->open(hw_mdl, nullptr, &device))) {
+    err = module->common.methods->open(hw_mdl, nullptr, &device);
+    if (err) {
         ALOGE("Can't open fingerprint methods, error: %d", err);
         return nullptr;
     }
@@ -251,6 +254,41 @@ fingerprint_device_t* BiometricsFingerprint::openHal() {
 
     fingerprint_device_t* fp_device =
         reinterpret_cast<fingerprint_device_t*>(device);
+
+    return fp_device;
+}
+
+fingerprint_device_t* getFingerprintDevice() {
+    fingerprint_device_t *fp_device;
+    std::string variant = base::GetProperty(PROP_VARIANT, "");
+
+    if (variant == "12") {
+        fp_device = getDeviceForVendor("goodix.fod");
+        if (fp_device == nullptr) {
+            ALOGE("Failed to load Goodix fingerprint module");
+        } else {
+            return fp_device;
+        }
+    } else if (variant == "11") {
+        fp_device = getDeviceForVendor("goodix.g6.fod");
+        if (fp_device == nullptr) {
+            ALOGE("Failed to load Goodix G6 fingerprint module");
+        } else {
+            return fp_device;
+        }
+    }
+
+    return nullptr;
+}
+
+fingerprint_device_t* BiometricsFingerprint::openHal() {
+    int err;
+
+    fingerprint_device_t *fp_device;
+    fp_device = getFingerprintDevice();
+    if (fp_device == nullptr) {
+        return nullptr;
+    }
 
     if (0 != (err =
             fp_device->set_notify(fp_device, BiometricsFingerprint::notify))) {
